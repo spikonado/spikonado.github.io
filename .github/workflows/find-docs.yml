@@ -1,0 +1,48 @@
+name: Find Spikonado Documentation Repositories
+on:
+  push:
+    branches:
+      - "main"
+
+  workflow_dispatch:
+    branches:
+
+  schedule:
+    # Runs every day at 00:00 UTC
+    - cron: "0 0 * * *"
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  find-docs:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Search for docs
+        uses: nick-fields/retry@v3
+        with:
+          command: gh search repos topic:spikonado-docs --owner spikonado --visibility public --sort updated --order desc --limit 1000 --json name,url,homepage,description > docs-list.json
+          max_attempts: 3
+          retry_wait_seconds: 180
+          timeout_minutes: 2
+
+      - name: Check for updates
+        id: has_updates
+        run: |
+          git config --global user.name 'Spikonado Docs Updater'
+          git config --global user.email 'your-username@users.noreply.github.com'
+          git diff --exit-code docs-list.json
+        continue-on-error: true
+
+      - name: Push updates
+        if: steps.has_updates.outcome != 'success'
+        run: |
+          git add docs-list.json
+          git commit -m "Update docs-list.json"
+          git push
